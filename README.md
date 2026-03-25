@@ -105,71 +105,51 @@ t("welcome")("Alice")
 
 The hook renders immediately with the last resolved translation set if one exists, otherwise with the fallback language. Then it updates when the matched language finishes loading.
 
-## API
+## Examples
 
-### `create(languages)`
+### Synchronous fallback access
 
-Creates a locale matcher.
-
-| Parameter   | Type         | Description                                 |
-|-------------|--------------|---------------------------------------------|
-| `languages` | `Languages`  | Language definitions; first is the fallback |
-
-Returns `(tags: string[]) => DataPromise<T, D>`.
-
-Notes:
-
-- `tags` should be ordered by user preference, usually `navigator.languages`.
-- The returned promise is still a real `Promise`, so `await`, `.then()`, and promise chaining all work normally.
-- `.fallback` gives you the first language's data synchronously, which is what the React binding uses for immediate rendering.
-
-### `react/create(languages)`
-
-Creates React bindings for the same language set.
-
-Returns:
+The returned promise exposes `.tag` and `.fallback` immediately, before resolution:
 
 ```ts
-{
-  useTranslation(tags?: string[]): readonly [DataFunction<D>, T]
-  match(tags: string[]): DataPromise<T, D>
-}
+const result = match(navigator.languages)
+
+console.log(result.tag)      // "zh-CN" — matched locale
+console.log(result.fallback) // en-US data, always available
+
+const t = await result       // zh-CN data, once loaded
 ```
 
-### Types
+### Leaf-path lookup (React)
+
+`t` doubles as a function that accepts dot-separated leaf paths:
 
 ```ts
-type Data = { [K in string]: any }
+t.items.apple
+t("items.apple")        // equivalent
 
-interface Language<T extends string, D extends Data, L extends boolean = true> {
-  readonly tag: T
-  readonly data: L extends false ? D : D | (() => D) | (() => Promise<D>)
-}
-
-type Languages<T extends string, D extends Data> = readonly [
-  Language<T, D, false>,
-  ...(readonly Language<T, D>[])
-]
-
-class DataPromise<T extends string, D extends Data> extends Promise<D> {
-  readonly tag: T
-  readonly fallback: D
-}
+t.welcome("Alice")
+t("welcome")("Alice")   // equivalent
 ```
 
-### React types
+Only leaf paths are valid — `t("items")` won't compile. Keys starting with `$` are treated as literal leaves, not nested path prefixes.
+
+### Custom locale override (React)
+
+```tsx
+const [t, tag] = useTranslation(["ja-JP"])
+```
+
+### Using `match` outside React
+
+The React binding also exports `match` for use in non-component code:
 
 ```ts
-type DataFunction<D> = D & ((path: string) => unknown)
+const { useTranslation, match } = create([en, zh, ja])
+
+// in a loader, server handler, etc.
+const t = await match(["en-US"])
 ```
-
-In practice it stays fully typed: only valid leaf paths are accepted, and the return type matches the selected translation value.
-
-A few details that matter:
-
-- Only leaf paths are callable. `t("items.apple")` is valid; `t("items")` is not.
-- Nested functions are excluded from further path traversal. If `welcome` is a function, `t("welcome")` is valid but `t("welcome.anything")` is not.
-- Keys starting with `$` are treated as literal leaf keys instead of nested path prefixes.
 
 ## License
 

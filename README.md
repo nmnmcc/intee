@@ -105,6 +105,93 @@ t("welcome")("Alice")
 
 The hook renders immediately with the last resolved translation set if one exists, otherwise with the fallback language. Then it updates when the matched language finishes loading.
 
+For RSC-friendly apps, use the explicit server/client entry points:
+
+```tsx
+// i18n/server.ts
+import { create } from "@nmnmcc/intee/react/server"
+import { languages } from "./languages"
+
+export const { getTranslation } = create(languages)
+```
+
+```tsx
+// app/page.tsx
+import { getTranslation } from "./i18n/server"
+
+export default async function Page() {
+  const [t, tag] = await getTranslation(["zh-CN"])
+
+  return (
+    <main lang={tag}>
+      <h1>{t.greeting}</h1>
+      <p>{t.welcome("Alice")}</p>
+    </main>
+  )
+}
+```
+
+```tsx
+// i18n/client.ts
+"use client"
+
+import { create } from "@nmnmcc/intee/react/client"
+import { languages } from "./languages"
+
+export const { TranslationProvider, useTranslation } = create(languages)
+```
+
+Only pass serializable values such as locale tags from Server Components to Client Components. Don't pass the translation object itself across the RSC boundary if your translations contain functions.
+
+### Next.js App Router
+
+Next.js support lives in a separate entry point:
+
+```tsx
+// app/i18n/server.ts
+import { create } from "@nmnmcc/intee/next"
+import { languages } from "./languages"
+
+export const { getLocaleTags, getTranslation } = create(languages)
+```
+
+```tsx
+// app/i18n/client.ts
+"use client"
+
+import { create } from "@nmnmcc/intee/next/client"
+import { languages } from "./languages"
+
+export const {
+  TranslationProvider,
+  useSetLocale,
+  useTranslation,
+} = create(languages)
+```
+
+```tsx
+// app/layout.tsx
+import { TranslationProvider } from "./i18n/client"
+import { getLocaleTags, getTranslation } from "./i18n/server"
+
+export default async function RootLayout({ children }) {
+  const tags = await getLocaleTags()
+  const [, tag] = await getTranslation(tags)
+
+  return (
+    <html lang={tag}>
+      <body>
+        <TranslationProvider tags={tags}>{children}</TranslationProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+`getLocaleTags()` reads the request in App Router Server Components. It checks the `NEXT_LOCALE` cookie first, then falls back to the `accept-language` header. You can change or disable the cookie with `create(languages, { cookieName })`.
+
+Client language switchers can call `useSetLocale()`. It writes the locale cookie and calls `router.refresh()`, so the next Server Component render uses the chosen locale.
+
 ## Examples
 
 ### Synchronous fallback access

@@ -1,4 +1,5 @@
 import {match as _match} from "@formatjs/intl-localematcher"
+export {parseAcceptLanguage} from "./locale"
 
 export type Data = {[K in string]: any}
 

@@ -1,0 +1,22 @@
+{
+	"name": "next-basic",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start"
+	},
+	"dependencies": {
+		"@nmnmcc/intee": "link:../..",
+		"next": "15.5.20",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7"
+	},
+	"devDependencies": {
+		"@types/node": "26.1.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"typescript": "^5.9.3"
+	}
+}

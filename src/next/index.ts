@@ -1,16 +1,20 @@
 import {cookies, headers} from "next/headers"
-import {create as _create, type Data, type Languages} from ".."
+import {
+	create as _create,
+	type Data,
+	type Languages,
+	type Translation,
+	type TranslationResult
+} from ".."
 import {parseAcceptLanguage} from "../locale"
-import {toDataFunction, type DataFunction} from "../translation"
+import {toDataFunction} from "../translation"
 
-export type NextCreateOptions = {
-	readonly cookieName?: string | false
-}
+export type NextCreateOptions = {readonly cookieName?: string | false}
 
 export type NextCreateResult<T extends string, D extends Data> = {
 	readonly getTranslation: (
 		tags?: readonly string[]
-	) => Promise<readonly [DataFunction<D>, T]>
+	) => Promise<TranslationResult<T, D>>
 	readonly getLocaleTags: () => Promise<string[]>
 	readonly match: ReturnType<typeof _create<T, D>>
 }
@@ -30,7 +34,9 @@ export const create = <const T extends string, const D extends Data>(
 			headers()
 		])
 		const cookieLocale =
-			cookieName === false ? undefined : cookieStore?.get(cookieName)?.value
+			cookieName === false
+				? undefined
+				: cookieStore?.get(cookieName)?.value
 		const headerLocales = parseAcceptLanguage(
 			headersList.get("accept-language")
 		)
@@ -44,7 +50,15 @@ export const create = <const T extends string, const D extends Data>(
 	const getTranslation = async (tags?: readonly string[]) => {
 		const result = match([...(tags ?? (await getLocaleTags()))])
 		const data = await result
-		return [toDataFunction(data), result.tag] as const
+		const translation: Translation<T, D> = {
+			data,
+			locale: {
+				current: result.locale.target,
+				target: result.locale.target
+			}
+		}
+
+		return {...translation, t: toDataFunction(data)}
 	}
 
 	return {getTranslation, getLocaleTags, match}

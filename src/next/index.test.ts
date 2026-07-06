@@ -2,10 +2,7 @@ import {beforeEach, describe, expect, test, vi} from "vitest"
 import {cookies, headers} from "next/headers"
 import {create} from "./index"
 
-vi.mock("next/headers", () => ({
-	cookies: vi.fn(),
-	headers: vi.fn()
-}))
+vi.mock("next/headers", () => ({cookies: vi.fn(), headers: vi.fn()}))
 
 const en = {tag: "en-US", data: {greeting: "Hello"}} as const
 const zh = {tag: "zh-CN", data: {greeting: "你好"}} as const
@@ -23,17 +20,15 @@ describe("next", () => {
 		} as Awaited<ReturnType<typeof cookies>>)
 		vi.mocked(headers).mockResolvedValue({
 			get: (name: string) =>
-				name === "accept-language"
-					? "zh-CN;q=0.9,en-US;q=0.8"
-					: null
+				name === "accept-language" ? "zh-CN;q=0.9,en-US;q=0.8" : null
 		} as Awaited<ReturnType<typeof headers>>)
 
 		const {getLocaleTags, getTranslation} = create([en, zh, ja])
 
 		expect(await getLocaleTags()).toEqual(["ja-JP", "zh-CN", "en-US"])
 
-		const [t, tag] = await getTranslation()
-		expect(tag).toBe("ja-JP")
+		const {t, locale} = await getTranslation()
+		expect(locale).toEqual({current: "ja-JP", target: "ja-JP"})
 		expect(t.greeting).toBe("こんにちは")
 	})
 

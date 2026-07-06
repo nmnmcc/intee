@@ -1,10 +1,16 @@
-import {create as _create, type Data, type Languages} from ".."
-import {toDataFunction, type DataFunction} from "../translation"
+import {
+	create as _create,
+	type Data,
+	type Languages,
+	type Translation,
+	type TranslationResult
+} from ".."
+import {toDataFunction} from "../translation"
 
 export type ServerCreateResult<T extends string, D extends Data> = {
 	readonly getTranslation: (
 		tags: readonly string[]
-	) => Promise<readonly [DataFunction<D>, T]>
+	) => Promise<TranslationResult<T, D>>
 	readonly match: ReturnType<typeof _create<T, D>>
 }
 
@@ -16,7 +22,15 @@ export const create = <const T extends string, const D extends Data>(
 	const getTranslation = async (tags: readonly string[]) => {
 		const result = match([...tags])
 		const data = await result
-		return [toDataFunction(data), result.tag] as const
+		const translation: Translation<T, D> = {
+			data,
+			locale: {
+				current: result.locale.target,
+				target: result.locale.target
+			}
+		}
+
+		return {...translation, t: toDataFunction(data)}
 	}
 
 	return {getTranslation, match}

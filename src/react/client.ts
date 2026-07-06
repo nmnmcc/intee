@@ -9,26 +9,43 @@ import {
 	useMemo,
 	useSyncExternalStore
 } from "react"
-import {create as _create, type Data, type Languages} from ".."
-import {toDataFunction, type DataFunction} from "../translation"
+import {
+	create as _create,
+	type Data,
+	type Languages,
+	type Locale,
+	type Translation,
+	type TranslationResult
+} from ".."
+import {matchTag} from "../match"
+import {toDataFunction} from "../translation"
 
-type Entry<T extends string, D extends Data> = {
-	readonly data: D
-	readonly tag: T
-}
-
-export type TranslationProviderProps = {
+export type TranslationProviderProps<
+	T extends string = string,
+	D extends Data = Data
+> = {
 	readonly tags?: readonly string[]
+	readonly initial?: Translation<T, D>
 	readonly children?: ReactNode
 }
 
+export type UseTranslationOptions<T extends string, D extends Data> = {
+	readonly tags?: readonly string[]
+	readonly initial?: Translation<T, D>
+	readonly suspense?: boolean
+}
+
 export type ClientCreateResult<T extends string, D extends Data> = {
-	readonly TranslationProvider: (props: TranslationProviderProps) => ReactNode
+	readonly TranslationProvider: (
+		props: TranslationProviderProps<T, D>
+	) => ReactNode
 	readonly useTranslation: (
-		tags?: readonly string[]
-	) => readonly [DataFunction<D>, T]
-	readonly useLocale: (tags?: readonly string[]) => T
-	readonly preload: (tags?: readonly string[]) => Promise<readonly [D, T]>
+		options?: readonly string[] | UseTranslationOptions<T, D>
+	) => TranslationResult<T, D>
+	readonly useLocale: (
+		options?: readonly string[] | Pick<UseTranslationOptions<T, D>, "tags">
+	) => Locale<T>
+	readonly preload: (tags?: readonly string[]) => Promise<Translation<T, D>>
 	readonly match: ReturnType<typeof _create<T, D>>
 }
 
@@ -36,16 +53,14 @@ export const create = <const T extends string, const D extends Data>(
 	languages: Languages<T, D>
 ): ClientCreateResult<T, D> => {
 	const match = _create(languages)
-	const fallback: Entry<T, D> = {
+	const fallback: Translation<T, D> = {
 		data: languages[0].data,
-		tag: languages[0].tag
+		locale: {current: languages[0].tag, target: languages[0].tag}
 	}
 
-	const TranslationContext = createContext<readonly string[] | undefined>(
-		undefined
-	)
-	const cache = new Map<string, Entry<T, D>>()
-	const pending = new Map<string, Promise<Entry<T, D>>>()
+	const TagsContext = createContext<readonly string[] | undefined>(undefined)
+	const cache = new Map<string, Translation<T, D>>()
+	const pending = new Map<string, Promise<Translation<T, D>>>()
 	const listeners = new Set<() => void>()
 
 	const subscribe = (listener: () => void) => {
@@ -55,7 +70,13 @@ export const create = <const T extends string, const D extends Data>(
 		}
 	}
 
-	const getServerSnapshot = () => fallback
+	const fallbackFor = (tags: readonly string[]): Translation<T, D> => ({
+		data: fallback.data,
+		locale: {
+			current: fallback.locale.current,
+			target: matchTag(languages, tags)
+		}
+	})
 
 	const load = (key: string, tags: readonly string[]) => {
 		const cached = cache.get(key)
@@ -67,17 +88,24 @@ export const create = <const T extends string, const D extends Data>(
 		const result = match([...tags])
 		const promise = result.then(
 			data => {
-				const entry = {data, tag: result.tag}
+				const entry = {
+					data,
+					locale: {
+						current: result.locale.target,
+						target: result.locale.target
+					}
+				}
 				pending.delete(key)
 				cache.set(key, entry)
 				for (const listener of listeners) listener()
 				return entry
 			},
 			() => {
+				const entry = fallbackFor(tags)
 				pending.delete(key)
-				cache.set(key, fallback)
+				cache.set(key, entry)
 				for (const listener of listeners) listener()
-				return fallback
+				return entry
 			}
 		)
 
@@ -93,46 +121,93 @@ export const create = <const T extends string, const D extends Data>(
 		contextTags ??
 		(typeof navigator !== "undefined" ? [...navigator.languages] : [])
 
-	const preload = async (tags?: readonly string[]) => {
-		const resolvedTags = resolveTags(tags)
-		const entry = await load(JSON.stringify(resolvedTags), resolvedTags)
-		return [entry.data, entry.tag] as const
+	const normalizeOptions = (
+		options?: readonly string[] | UseTranslationOptions<T, D>
+	) => (Array.isArray(options) ? {tags: options} : (options ?? {}))
+
+	const keyFor = (tags: readonly string[]) => JSON.stringify(tags)
+
+	const writeInitial = (
+		key: string,
+		initial: Translation<T, D> | undefined
+	) => {
+		if (initial && !cache.has(key)) cache.set(key, initial)
 	}
 
-	const useTranslation = (tags?: readonly string[]) => {
-		const contextTags = useContext(TranslationContext)
+	const preload = async (tags?: readonly string[]) => {
+		const resolvedTags = resolveTags(tags)
+		const entry = await load(keyFor(resolvedTags), resolvedTags)
+		return entry
+	}
+
+	const useTranslation = (
+		options?: readonly string[] | UseTranslationOptions<T, D>
+	) => {
+		const {tags, initial, suspense = false} = normalizeOptions(options)
+		const contextTags = useContext(TagsContext)
 		const resolvedTags = useMemo(
 			() => resolveTags(tags, contextTags),
 			[contextTags, tags]
 		)
-		const key = useMemo(() => JSON.stringify(resolvedTags), [resolvedTags])
+		const key = useMemo(() => keyFor(resolvedTags), [resolvedTags])
+		const fallbackEntry = useMemo(
+			() => fallbackFor(resolvedTags),
+			[resolvedTags]
+		)
 
-		void load(key, resolvedTags)
+		writeInitial(key, initial)
+
+		if (suspense && !cache.has(key)) throw load(key, resolvedTags)
+		if (!suspense) void load(key, resolvedTags)
 
 		const getSnapshot = useCallback(
-			() => cache.get(key) ?? fallback,
-			[key]
+			() => cache.get(key) ?? fallbackEntry,
+			[fallbackEntry, key]
 		)
-		const entry = useSyncExternalStore(
-			subscribe,
-			getSnapshot,
-			getServerSnapshot
-		)
-		const df = useMemo(() => toDataFunction(entry.data), [entry.data])
+		const entry = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+		const t = useMemo(() => toDataFunction(entry.data), [entry.data])
 
-		return [df, entry.tag] as const
+		return {...entry, t}
 	}
 
-	const useLocale = (tags?: readonly string[]) => {
-		const [, tag] = useTranslation(tags)
-		return tag
+	const useLocale = (
+		options?: readonly string[] | Pick<UseTranslationOptions<T, D>, "tags">
+	) => {
+		const {tags} = Array.isArray(options)
+			? {tags: options}
+			: (options ?? {})
+		const contextTags = useContext(TagsContext)
+		const resolvedTags = useMemo(
+			() => resolveTags(tags, contextTags),
+			[contextTags, tags]
+		)
+		const key = useMemo(() => keyFor(resolvedTags), [resolvedTags])
+		const fallbackLocale = useMemo(
+			() => ({
+				current: languages[0].tag,
+				target: matchTag(languages, resolvedTags)
+			}),
+			[resolvedTags]
+		)
+		const getSnapshot = useCallback(
+			() => cache.get(key)?.locale ?? fallbackLocale,
+			[fallbackLocale, key]
+		)
+
+		return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 	}
 
 	const TranslationProvider = ({
 		tags,
+		initial,
 		children
-	}: TranslationProviderProps) =>
-		createElement(TranslationContext.Provider, {value: tags}, children)
+	}: TranslationProviderProps<T, D>) => {
+		const value = tags ?? (initial ? [initial.locale.target] : undefined)
+
+		if (initial && value) cache.set(keyFor(value), initial)
+
+		return createElement(TagsContext.Provider, {value}, children)
+	}
 
 	return {TranslationProvider, useTranslation, useLocale, preload, match}
 }

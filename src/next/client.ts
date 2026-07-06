@@ -16,10 +16,12 @@ export type NextClientCreateOptions = {
 	readonly cookieSecure?: boolean
 }
 
-export type NextClientCreateResult<T extends string, D extends Data> =
-	ClientCreateResult<T, D> & {
-		readonly useSetLocale: () => (locale?: string | null) => void
-	}
+export type NextClientCreateResult<
+	T extends string,
+	D extends Data
+> = ClientCreateResult<T, D> & {
+	readonly useSetLocale: () => (locale?: string | null) => void
+}
 
 const defaultCookieName = "NEXT_LOCALE"
 const defaultCookieMaxAge = 60 * 60 * 24 * 365
@@ -38,7 +40,11 @@ export const create = <const T extends string, const D extends Data>(
 		return useCallback(
 			(locale?: string | null) => {
 				if (cookieName !== false) {
-					document.cookie = serializeCookie(cookieName, locale, options)
+					document.cookie = serializeCookie(
+						cookieName,
+						locale,
+						options
+					)
 				}
 
 				if (locale) void react.preload([locale])

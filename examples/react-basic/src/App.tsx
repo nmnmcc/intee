@@ -5,7 +5,7 @@ const LOCALES = ["en-US", "zh-CN", "ja-JP"] as const
 
 export default function App() {
 	const [locale, setLocale] = useState<string | undefined>(undefined)
-	const [t] = useTranslation(locale ? [locale] : undefined)
+	const {t} = useTranslation(locale ? [locale] : undefined)
 
 	return (
 		<div

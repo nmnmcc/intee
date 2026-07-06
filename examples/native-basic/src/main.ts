@@ -19,7 +19,8 @@ const select = document.getElementById("locale-select") as HTMLSelectElement
 async function render(locale: string) {
 	output.textContent = "Loading…"
 
-	const t = await match([locale])
+	const result = match([locale])
+	const t = await result
 
 	output.innerHTML = `
 		<p><strong>${t.greeting}</strong></p>
@@ -28,7 +29,7 @@ async function render(locale: string) {
 		<p>${t.itemCount(3)}</p>
 		<p>${t.farewell}</p>
 		<p>Items: ${t.items.apple}, ${t.items.banana}, ${t.items.cherry}</p>
-		<p style="color: #888; font-size: 0.85rem">Matched locale: ${locale}</p>
+		<p style="color: #888; font-size: 0.85rem">Matched locale: ${result.locale.target}</p>
 	`
 }
 

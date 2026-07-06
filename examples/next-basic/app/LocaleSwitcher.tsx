@@ -6,7 +6,7 @@ import {useSetLocale, useTranslation} from "./i18n/client"
 const locales = ["en-US", "zh-CN", "ja-JP"] as const
 
 export function LocaleSwitcher() {
-	const [t, tag] = useTranslation()
+	const {t, locale} = useTranslation({suspense: true})
 	const setLocale = useSetLocale()
 	const [pending, startTransition] = useTransition()
 
@@ -15,7 +15,7 @@ export function LocaleSwitcher() {
 			<span>{t.switchLocale}</span>
 			<select
 				disabled={pending}
-				value={tag}
+				value={locale.target}
 				onChange={event => {
 					startTransition(() => {
 						setLocale(event.currentTarget.value)

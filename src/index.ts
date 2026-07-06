@@ -1,4 +1,5 @@
-import {match as _match} from "@formatjs/intl-localematcher"
+import {matchTag} from "./match"
+import {type DataFunction} from "./translation"
 export {parseAcceptLanguage} from "./locale"
 
 export type Data = {[K in string]: any}
@@ -17,23 +18,30 @@ export type Languages<T extends string, D extends Data> = readonly [
 	...(readonly Language<T, NoInfer<D>>[])
 ]
 
+export type Locale<T extends string> = {readonly current: T; readonly target: T}
+
+export type Translation<T extends string, D extends Data> = {
+	readonly data: D
+	readonly locale: Locale<T>
+}
+
+export type TranslationResult<T extends string, D extends Data> = Translation<
+	T,
+	D
+> & {readonly t: DataFunction<D>}
+
 export const create =
 	<const T extends string, const D extends Data>(
 		languages: Languages<T, D>
 	) =>
 	(tags: string[]): DataPromise<T, D> => {
 		const fallback = languages[0]
+		const target = matchTag(languages, tags)
+		const locale = {current: fallback.tag, target} as const
 
-		const result = _match(
-			tags,
-			languages.map(l => l.tag),
-			languages[0].tag,
-			{algorithm: "best fit"}
-		) as T
+		const {data} = languages.find(({tag}) => tag === target)!
 
-		const {data} = languages.find(({tag}) => tag === result)!
-
-		return new DataPromise(result, fallback.data, (resolve, reject) => {
+		return new DataPromise(locale, fallback.data, (resolve, reject) => {
 			try {
 				if (data instanceof Function) {
 					resolve(data())
@@ -51,8 +59,12 @@ export class DataPromise<T extends string, F extends Data> extends Promise<F> {
 		return Promise
 	}
 
+	get tag() {
+		return this.locale.target
+	}
+
 	constructor(
-		public readonly tag: T,
+		public readonly locale: Locale<T>,
 		public readonly fallback: F,
 		executor: (
 			resolve: (value: F | PromiseLike<F>) => void,

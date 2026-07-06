@@ -219,6 +219,11 @@ export const {TranslationProvider, useSetLocale, useTranslation} =
 	create(languages)
 ```
 
+In the Next.js client entry point, `useTranslation` always uses Suspense. This
+keeps Server Component HTML in place during hydration until the target language
+is ready on the client, instead of briefly rendering fallback-language text.
+`TranslationProvider` includes the Suspense boundary for its children.
+
 ```tsx
 // app/layout.tsx
 import {TranslationProvider} from "./i18n/client"

@@ -4,9 +4,9 @@ import {create} from "./index"
 
 vi.mock("next/headers", () => ({cookies: vi.fn(), headers: vi.fn()}))
 
-const en = {tag: "en-US", data: {greeting: "Hello"}} as const
-const zh = {tag: "zh-CN", data: {greeting: "你好"}} as const
-const ja = {tag: "ja-JP", data: {greeting: "こんにちは"}} as const
+const en = {tag: "en-US", data: {greeting: "Hello"}}
+const zh = {tag: "zh-CN", data: {greeting: "你好"}}
+const ja = {tag: "ja-JP", data: {greeting: "こんにちは"}}
 
 describe("next", () => {
 	beforeEach(() => {

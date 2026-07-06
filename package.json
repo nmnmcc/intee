@@ -1,6 +1,6 @@
 {
 	"name": "@nmnmcc/intee",
-	"version": "3.0.0",
+	"version": "3.1.0",
 	"description": "Your translations are your types.",
 	"type": "module",
 	"packageManager": "yarn@4.12.0",

@@ -1,12 +1,13 @@
 "use client"
 
-import {useCallback} from "react"
+import {Suspense, createElement, useCallback} from "react"
 import {useRouter} from "next/navigation"
 import {
 	create as createReactClient,
-	type ClientCreateResult
+	type ClientCreateResult,
+	type UseTranslationOptions
 } from "../react/client"
-import {type Data, type Languages} from ".."
+import {type Data, type Languages, type TranslationResult} from ".."
 
 export type NextClientCreateOptions = {
 	readonly cookieName?: string | false
@@ -16,10 +17,22 @@ export type NextClientCreateOptions = {
 	readonly cookieSecure?: boolean
 }
 
-export type NextClientCreateResult<
-	T extends string,
-	D extends Data
-> = ClientCreateResult<T, D> & {
+export type NextUseTranslationOptions<T extends string, D extends Data> = Omit<
+	UseTranslationOptions<T, D>,
+	"suspense"
+> & {readonly suspense?: true}
+
+export type NextClientCreateResult<T extends string, D extends Data> = Omit<
+	ClientCreateResult<T, D>,
+	"TranslationProvider" | "useTranslation"
+> & {
+	readonly TranslationProvider: ClientCreateResult<
+		T,
+		D
+	>["TranslationProvider"]
+	readonly useTranslation: (
+		options?: readonly string[] | NextUseTranslationOptions<T, D>
+	) => TranslationResult<T, D>
 	readonly useSetLocale: () => (locale?: string | null) => void
 }
 
@@ -33,6 +46,25 @@ export const create = <const T extends string, const D extends Data>(
 ): NextClientCreateResult<T, D> => {
 	const react = createReactClient(languages)
 	const cookieName = options.cookieName ?? defaultCookieName
+
+	const TranslationProvider: ClientCreateResult<
+		T,
+		D
+	>["TranslationProvider"] = ({children, ...props}) =>
+		createElement(
+			react.TranslationProvider,
+			props,
+			createElement(Suspense, {fallback: null}, children)
+		)
+
+	const useTranslation = (
+		hookOptions?: readonly string[] | NextUseTranslationOptions<T, D>
+	) =>
+		react.useTranslation(
+			Array.isArray(hookOptions)
+				? {tags: hookOptions, suspense: true}
+				: {...hookOptions, suspense: true}
+		)
 
 	const useSetLocale = () => {
 		const router = useRouter()
@@ -54,7 +86,7 @@ export const create = <const T extends string, const D extends Data>(
 		)
 	}
 
-	return {...react, useSetLocale}
+	return {...react, TranslationProvider, useTranslation, useSetLocale}
 }
 
 const serializeCookie = (

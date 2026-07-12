@@ -43,4 +43,23 @@ describe("next", () => {
 		expect(await getLocaleTags()).toEqual(["zh-CN", "en-US"])
 		expect(cookies).not.toHaveBeenCalled()
 	})
+
+	test("ignores an invalid locale cookie", async () => {
+		vi.mocked(cookies).mockResolvedValue({
+			get: (name: string) =>
+				name === "NEXT_LOCALE" ? {value: "en_US"} : undefined
+		} as Awaited<ReturnType<typeof cookies>>)
+		vi.mocked(headers).mockResolvedValue({
+			get: (name: string) =>
+				name === "accept-language" ? "zh-CN,en-US;q=0.8" : null
+		} as Awaited<ReturnType<typeof headers>>)
+
+		const {getLocaleTags, getTranslation} = create([en, zh, ja])
+
+		expect(await getLocaleTags()).toEqual(["zh-CN", "en-US"])
+		expect((await getTranslation()).locale).toEqual({
+			current: "zh-CN",
+			target: "zh-CN"
+		})
+	})
 })

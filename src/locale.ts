@@ -19,7 +19,9 @@ export const parseAcceptLanguage = (header?: string | null): string[] => {
 				if (name !== "q") return result
 
 				const next = Number(value)
-				return Number.isFinite(next) ? Math.min(Math.max(next, 0), 1) : result
+				return Number.isFinite(next)
+					? Math.min(Math.max(next, 0), 1)
+					: result
 			}, 1)
 
 			if (quality <= 0) return undefined
@@ -27,14 +29,12 @@ export const parseAcceptLanguage = (header?: string | null): string[] => {
 			return {tag, quality, index}
 		})
 		.filter((language): language is WeightedLanguage => Boolean(language))
-		.sort(
-			(a, b) => b.quality - a.quality || a.index - b.index
-		)
+		.sort((a, b) => b.quality - a.quality || a.index - b.index)
 		.map(({tag}) => tag)
 		.filter((tag, index, tags) => tags.indexOf(tag) === index)
 }
 
-const normalizeLanguageTag = (tag?: string) => {
+export const normalizeLanguageTag = (tag?: string | null) => {
 	if (!tag) return undefined
 
 	const trimmed = tag.trim()

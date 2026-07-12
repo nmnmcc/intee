@@ -1,5 +1,5 @@
 import {createElement} from "react"
-import {renderToString} from "react-dom/server"
+import {renderToReadableStream, renderToString} from "react-dom/server"
 import {describe, expect, test} from "vitest"
 import {create} from "./client"
 
@@ -57,5 +57,44 @@ describe("react/client", () => {
 		)
 
 		expect(html).toContain("zh-CN/zh-CN:你好")
+	})
+
+	test("keeps server translation stores isolated between renders", async () => {
+		const {TranslationProvider, useTranslation} = create([
+			en,
+			{tag: "zh-CN", data: async () => ({greeting: "loader-value"})}
+		])
+		const render = async (initial?: {
+			readonly data: {readonly greeting: string}
+			readonly locale: {
+				readonly current: "zh-CN"
+				readonly target: "zh-CN"
+			}
+		}) => {
+			const providerProps = initial
+				? {tags: ["zh-CN"], initial}
+				: {tags: ["zh-CN"]}
+			const stream = await renderToReadableStream(
+				createElement(
+					TranslationProvider,
+					providerProps,
+					createElement(function Login() {
+						const {t} = useTranslation({suspense: true})
+
+						return createElement("p", null, t.greeting)
+					})
+				)
+			)
+			await stream.allReady
+			return new Response(stream).text()
+		}
+
+		expect(
+			await render({
+				data: {greeting: "request-A-only"},
+				locale: {current: "zh-CN", target: "zh-CN"}
+			})
+		).toContain("request-A-only")
+		expect(await render()).toContain("loader-value")
 	})
 })

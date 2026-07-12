@@ -1,5 +1,5 @@
 import {describe, expect, test} from "vitest"
-import {parseAcceptLanguage} from "./locale"
+import {normalizeLanguageTag, parseAcceptLanguage} from "./locale"
 
 describe("parseAcceptLanguage", () => {
 	test("sorts by q value and preserves stable order", () => {
@@ -10,12 +10,19 @@ describe("parseAcceptLanguage", () => {
 
 	test("filters invalid, wildcard, zero-quality, and duplicate tags", () => {
 		expect(
-			parseAcceptLanguage("*, bogus tag, en-US;q=0, en-us;q=0.8, en-US;q=0.7")
+			parseAcceptLanguage(
+				"*, bogus tag, en-US;q=0, en-us;q=0.8, en-US;q=0.7"
+			)
 		).toEqual(["en-US"])
 	})
 
 	test("returns an empty array for missing headers", () => {
 		expect(parseAcceptLanguage()).toEqual([])
 		expect(parseAcceptLanguage(null)).toEqual([])
+	})
+
+	test("normalizes individual BCP 47 tags", () => {
+		expect(normalizeLanguageTag("zh-cn")).toBe("zh-CN")
+		expect(normalizeLanguageTag("en_US")).toBeUndefined()
 	})
 })

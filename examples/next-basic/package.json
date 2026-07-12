@@ -3,8 +3,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "next dev",
-		"build": "next build",
+		"dev": "yarn workspace @nmnmcc/intee build && next dev",
+		"build": "yarn workspace @nmnmcc/intee build && next build",
 		"start": "next start"
 	},
 	"dependencies": {

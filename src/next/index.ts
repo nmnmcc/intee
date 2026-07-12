@@ -6,7 +6,7 @@ import {
 	type Translation,
 	type TranslationResult
 } from ".."
-import {parseAcceptLanguage} from "../locale"
+import {normalizeLanguageTag, parseAcceptLanguage} from "../locale"
 import {toDataFunction} from "../translation"
 
 export type NextCreateOptions = {readonly cookieName?: string | false}
@@ -36,7 +36,7 @@ export const create = <const T extends string, const D extends Data>(
 		const cookieLocale =
 			cookieName === false
 				? undefined
-				: cookieStore?.get(cookieName)?.value
+				: normalizeLanguageTag(cookieStore?.get(cookieName)?.value)
 		const headerLocales = parseAcceptLanguage(
 			headersList.get("accept-language")
 		)

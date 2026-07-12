@@ -219,10 +219,13 @@ export const {TranslationProvider, useSetLocale, useTranslation} =
 	create(languages)
 ```
 
-In the Next.js client entry point, `useTranslation` always uses Suspense. This
-keeps Server Component HTML in place during hydration until the target language
-is ready on the client, instead of briefly rendering fallback-language text.
-`TranslationProvider` includes the Suspense boundary for its children.
+In the Next.js client entry point, `useTranslation` and `useLocale` always use
+Suspense. This keeps Server Component HTML in place during hydration until the
+target language is ready on the client, instead of briefly rendering
+fallback-language text. `TranslationProvider` includes the Suspense boundary for
+its children. For a client-only update that may suspend after mount, place a
+closer `<Suspense>` boundary around that feature, or pass a scoped `fallback` to
+`TranslationProvider`, so unrelated UI stays visible.
 
 ```tsx
 // app/layout.tsx
@@ -248,10 +251,17 @@ export default async function RootLayout({children}) {
 `getLocaleTags()` reads the request in App Router Server Components. It checks
 the `NEXT_LOCALE` cookie first, then falls back to the `accept-language` header.
 You can change or disable the cookie with `create(languages, { cookieName })`.
+When you disable it with `cookieName: false`, the client result does not include
+`useSetLocale`; use locale-aware routes or another app-owned persistence
+strategy instead.
 
 Client language switchers can call `useSetLocale()`. It writes the locale cookie
 and calls `router.refresh()`, so the next Server Component render uses the
-chosen locale.
+chosen locale. Locale tags are canonicalized before they are stored; invalid
+values are ignored. The cookie defaults to `SameSite=Lax` and automatically adds
+`Secure` on HTTPS. It is intentionally client-readable so this hook can update
+it. If your application requires an `HttpOnly` preference cookie, set it in an
+app-owned Server Action or Route Handler instead, then refresh the route.
 
 ## Examples
 

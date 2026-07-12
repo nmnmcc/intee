@@ -49,10 +49,17 @@ export type ClientCreateResult<T extends string, D extends Data> = {
 	readonly match: ReturnType<typeof _create<T, D>>
 }
 
+type TranslationStore<T extends string, D extends Data> = {
+	readonly cache: Map<string, Translation<T, D>>
+	readonly pending: Map<string, Promise<Translation<T, D>>>
+	readonly listeners: Set<() => void>
+}
+
 type TranslationContextValue<T extends string, D extends Data> = {
 	readonly tags: readonly string[] | undefined
 	readonly initial: Translation<T, D> | undefined
 	readonly initialKey: string | undefined
+	readonly store: TranslationStore<T, D>
 }
 
 export const create = <const T extends string, const D extends Data>(
@@ -67,14 +74,17 @@ export const create = <const T extends string, const D extends Data>(
 	const TranslationContext = createContext<
 		TranslationContextValue<T, D> | undefined
 	>(undefined)
-	const cache = new Map<string, Translation<T, D>>()
-	const pending = new Map<string, Promise<Translation<T, D>>>()
-	const listeners = new Set<() => void>()
+	const createStore = (): TranslationStore<T, D> => ({
+		cache: new Map<string, Translation<T, D>>(),
+		pending: new Map<string, Promise<Translation<T, D>>>(),
+		listeners: new Set<() => void>()
+	})
+	const clientStore = createStore()
 
-	const subscribe = (listener: () => void) => {
-		listeners.add(listener)
+	const subscribe = (store: TranslationStore<T, D>, listener: () => void) => {
+		store.listeners.add(listener)
 		return () => {
-			listeners.delete(listener)
+			store.listeners.delete(listener)
 		}
 	}
 
@@ -86,11 +96,15 @@ export const create = <const T extends string, const D extends Data>(
 		}
 	})
 
-	const load = (key: string, tags: readonly string[]) => {
-		const cached = cache.get(key)
+	const load = (
+		store: TranslationStore<T, D>,
+		key: string,
+		tags: readonly string[]
+	) => {
+		const cached = store.cache.get(key)
 		if (cached) return Promise.resolve(cached)
 
-		const active = pending.get(key)
+		const active = store.pending.get(key)
 		if (active) return active
 
 		const result = match([...tags])
@@ -103,21 +117,21 @@ export const create = <const T extends string, const D extends Data>(
 						target: result.locale.target
 					}
 				}
-				pending.delete(key)
-				cache.set(key, entry)
-				for (const listener of listeners) listener()
+				store.pending.delete(key)
+				store.cache.set(key, entry)
+				for (const listener of store.listeners) listener()
 				return entry
 			},
 			() => {
 				const entry = fallbackFor(tags)
-				pending.delete(key)
-				cache.set(key, entry)
-				for (const listener of listeners) listener()
+				store.pending.delete(key)
+				store.cache.set(key, entry)
+				for (const listener of store.listeners) listener()
 				return entry
 			}
 		)
 
-		pending.set(key, promise)
+		store.pending.set(key, promise)
 		return promise
 	}
 
@@ -145,15 +159,19 @@ export const create = <const T extends string, const D extends Data>(
 	const keyFor = (tags: readonly string[]) => JSON.stringify(tags)
 
 	const writeInitial = (
+		store: TranslationStore<T, D> | undefined,
 		key: string,
 		initial: Translation<T, D> | undefined
 	) => {
-		if (initial && !cache.has(key)) cache.set(key, initial)
+		if (initial && store && !store.cache.has(key))
+			store.cache.set(key, initial)
 	}
 
 	const preload = async (tags?: readonly string[]) => {
 		const resolvedTags = resolveTags(tags)
-		const entry = await load(keyFor(resolvedTags), resolvedTags)
+		const store =
+			typeof window === "undefined" ? createStore() : clientStore
+		const entry = await load(store, keyFor(resolvedTags), resolvedTags)
 		return entry
 	}
 
@@ -162,6 +180,9 @@ export const create = <const T extends string, const D extends Data>(
 	) => {
 		const {tags, initial, suspense = false} = normalizeOptions(options)
 		const context = useContext(TranslationContext)
+		const store =
+			context?.store ??
+			(typeof window === "undefined" ? undefined : clientStore)
 		const contextTags = context?.tags
 		const resolvedTags = useMemo(
 			() => resolveTags(tags, contextTags),
@@ -181,21 +202,32 @@ export const create = <const T extends string, const D extends Data>(
 			initial ??
 			(context?.initialKey === key ? context.initial : undefined)
 
-		writeInitial(key, initialEntry)
+		writeInitial(store, key, initialEntry)
 
-		if (suspense && !cache.has(key)) throw load(key, resolvedTags)
-		if (!suspense) void load(key, resolvedTags)
+		if (suspense && store && !store.cache.has(key)) {
+			throw load(store, key, resolvedTags)
+		}
+		if (!suspense && store) void load(store, key, resolvedTags)
+
+		const subscribeToStore = useCallback(
+			(listener: () => void) =>
+				store ? subscribe(store, listener) : () => undefined,
+			[store]
+		)
 
 		const getSnapshot = useCallback(
-			() => cache.get(key) ?? fallbackEntry,
-			[fallbackEntry, key]
+			() => store?.cache.get(key) ?? fallbackEntry,
+			[fallbackEntry, key, store]
 		)
 		const getServerSnapshot = useCallback(
-			() => initialEntry ?? serverFallbackEntry,
-			[initialEntry, serverFallbackEntry]
+			() =>
+				initialEntry ??
+				(suspense ? store?.cache.get(key) : undefined) ??
+				serverFallbackEntry,
+			[initialEntry, key, serverFallbackEntry, store, suspense]
 		)
 		const entry = useSyncExternalStore(
-			subscribe,
+			subscribeToStore,
 			getSnapshot,
 			getServerSnapshot
 		)
@@ -209,6 +241,9 @@ export const create = <const T extends string, const D extends Data>(
 	) => {
 		const {tags} = isTags(options) ? {tags: options} : (options ?? {})
 		const context = useContext(TranslationContext)
+		const store =
+			context?.store ??
+			(typeof window === "undefined" ? undefined : clientStore)
 		const contextTags = context?.tags
 		const resolvedTags = useMemo(
 			() => resolveTags(tags, contextTags),
@@ -231,8 +266,8 @@ export const create = <const T extends string, const D extends Data>(
 			[serverTags]
 		)
 		const getSnapshot = useCallback(
-			() => cache.get(key)?.locale ?? fallbackLocale,
-			[fallbackLocale, key]
+			() => store?.cache.get(key)?.locale ?? fallbackLocale,
+			[fallbackLocale, key, store]
 		)
 		const getServerSnapshot = useCallback(
 			() =>
@@ -241,8 +276,17 @@ export const create = <const T extends string, const D extends Data>(
 					: serverFallbackLocale,
 			[context, key, serverFallbackLocale]
 		)
+		const subscribeToStore = useCallback(
+			(listener: () => void) =>
+				store ? subscribe(store, listener) : () => undefined,
+			[store]
+		)
 
-		return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+		return useSyncExternalStore(
+			subscribeToStore,
+			getSnapshot,
+			getServerSnapshot
+		)
 	}
 
 	const TranslationProvider = ({
@@ -250,11 +294,15 @@ export const create = <const T extends string, const D extends Data>(
 		initial,
 		children
 	}: TranslationProviderProps<T, D>) => {
+		const store = useMemo(
+			() => (typeof window === "undefined" ? createStore() : clientStore),
+			[]
+		)
 		const value = tags ?? (initial ? [initial.locale.target] : undefined)
 		const initialKey = initial && value ? keyFor(value) : undefined
-		const context = {tags: value, initial, initialKey}
+		const context = {tags: value, initial, initialKey, store}
 
-		if (initial && value) cache.set(keyFor(value), initial)
+		if (initial && value) store.cache.set(keyFor(value), initial)
 
 		return createElement(
 			TranslationContext.Provider,
